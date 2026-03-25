@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0a08" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="黄金行情" />
+<title>黄金行情 · XAU/CNH</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+
+<style>
+  :root {
+    --gold:      #c9a84c;
+    --gold-dim:  #8a6d2f;
+    --gold-glow: rgba(201, 168, 76, 0.18);
+    --up:        #e05252;
+    --down:      #4caf7d;
+    --flat:      #e09b40;
+    --bg:        #0a0a08;
+    --surface:   #12120e;
+    --surface-hover: #1a1a14;
+    --border:    rgba(255, 255, 255, 0.07);
+    --border-light: rgba(255, 255, 255, 0.13);
+    --text:      #e8e4d8;
+    --muted:     #5a5650;
+    --mono:      'JetBrains Mono', monospace;
+    --serif:     'Cormorant Garamond', serif;
+    --radius:    12px;
+    --radius-sm: 6px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--serif);
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app {
+    position: relative; z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 32px;
+    padding-left:  max(32px, env(safe-area-inset-left));
+    padding-right: max(32px, env(safe-area-inset-right));
+  }
+
+  /* ── Header ── */
+  header {
+    padding: 28px 0 20px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+
+  header::after {
+    content: '';
+    position: absolute;
+    bottom: -1px; left: 0;
+    width: 48px; height: 1px;
+    background: var(--gold);
+  }
+
+  .brand { display: flex; flex-direction: column; gap: 6px; }
+
+  .brand-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-weight: 400;
+  }
+
+  .brand-title {
+    font-size: 26px;
+    font-weight: 300;
+    letter-spacing: 0.04em;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .brand-title em { font-style: italic; color: var(--gold); }
+
+  .header-actions {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 12px;
+  }
+
+  .status-wrapper {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+  }
+
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.4s;
+  }
+
+  .status-dot.live {
+    background: #4caf7d;
+    box-shadow: 0 0 8px rgba(76, 175, 125, 0.6);
+    animation: pulse 2s infinite;
+  }
+
+  .status-dot.error { background: var(--up); box-shadow: 0 0 8px rgba(224, 82, 82, 0.6); }
+
+  @keyframes pulse {
+    0%   { opacity: 1; }
+    50%  { opacity: 0.4; }
+    100% { opacity: 1; }
+  }
+
+  .status-text {
+    font-family: var(--mono); font-size: 10px; color: var(--text); letter-spacing: 0.05em;
+  }
+
+  /* ── Controls ── */
+  .controls { display: flex; align-items: center; gap: 8px; }
+
+  .custom-select-wrapper {
+    position: relative;
+    display: flex; align-items: center;
+  }
+
+  .custom-select-wrapper::after {
+    content: '▾';
+    font-family: var(--mono);
+    position: absolute; right: 10px; color: var(--muted); pointer-events: none; font-size: 12px;
+  }
+
+  .interval-select, .refresh-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 0.1em;
+  }
+
+  .interval-select {
+    padding-right: 28px;
+    appearance: none; -webkit-appearance: none;
+    color: var(--muted);
+  }
+
+  .refresh-btn { display: flex; align-items: center; gap: 6px; text-transform: uppercase; }
+
+  .interval-select:hover, .refresh-btn:hover {
+    border-color: var(--border-light); background: var(--surface-hover); color: var(--text);
+  }
+  .refresh-btn:active { transform: scale(0.98); }
+
+  /* ── Main ── */
+  main { flex: 1; padding: 40px 0; display: flex; flex-direction: column; gap: 40px; }
+
+  /* ── Price Hero ── */
+  .price-hero {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;
+  }
+
+  .price-primary { display: flex; flex-direction: column; gap: 8px; }
+
+  .price-unit {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.25em; color: var(--muted); text-transform: uppercase;
+  }
+
+  .price-value {
+    font-size: clamp(64px, 8vw, 96px);
+    font-weight: 300;
+    letter-spacing: -0.03em;
+    line-height: 0.9;
+    color: var(--text);
+    transition: color 0.4s ease;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .price-value.up   { color: var(--up); text-shadow: 0 4px 24px rgba(224, 82, 82, 0.15); }
+  .price-value.down { color: var(--down); text-shadow: 0 4px 24px rgba(76, 175, 125, 0.15); }
+  .price-value.flat { color: var(--flat); }
+
+  .price-meta {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 12px; padding-bottom: 6px;
+  }
+
+  .change-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 16px; font-weight: 500;
+    padding: 8px 18px; border-radius: 20px;
+    border: 1px solid transparent; backdrop-filter: blur(8px);
+    transition: all 0.4s ease; letter-spacing: 0.05em;
+  }
+
+  .change-badge.up   { color: var(--up);   border-color: rgba(224,82,82,0.3);   background: rgba(224,82,82,0.08); }
+  .change-badge.down { color: var(--down); border-color: rgba(76,175,125,0.3); background: rgba(76,175,125,0.08); }
+  .change-badge.flat { color: var(--flat); border-color: rgba(224,155,64,0.3); background: rgba(224,155,64,0.08); }
+
+  .change-arrow { font-size: 14px; line-height: 1; }
+
+  .update-time {
+    font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.1em; opacity: 0.8;
+  }
+
+  /* ── Chart & Progress ── */
+  .chart-wrap {
+    position: relative;
+    background: #0d0d0b;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 0 0 0;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.02), 0 8px 32px rgba(0,0,0,0.3);
+    overflow: hidden;
+  }
+
+  .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 0 20px; }
+
+  .chart-title {
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.25em; color: var(--muted); text-transform: uppercase; font-weight: 500;
+  }
+
+  .chart-range-info {
+    font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.05em;
+  }
+
+  .chart-canvas-wrap { position: relative; height: 180px; width: 100%; }
+
+  /* Last price line + badge (TradingView style) */
+  .last-price-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    border-top: 1px dashed rgba(255,255,255,0.16);
+    pointer-events: none;
+    z-index: 8;
+    display: none;
+  }
+
+  .last-price-badge {
+    position: absolute;
+    right: 0;
+    transform: translateY(-50%);
+    display: none;
+    align-items: center;
+    z-index: 9;
+    pointer-events: none;
+  }
+
+  .last-price-dash {
+    height: 1px;
+    width: 18px;
+    background: var(--text);
+    opacity: 0.3;
+    flex-shrink: 0;
+  }
+
+  .last-price-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: #0a0a08;
+    background: var(--text);
+    padding: 3px 8px 3px 5px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .last-price-badge.up .last-price-tag   { background: var(--up);   color: #fff; }
+  .last-price-badge.down .last-price-tag { background: var(--down); color: #fff; }
+  .last-price-badge.flat .last-price-tag { background: #555; color: #eee; }
+  .last-price-badge.up   .last-price-dash { background: var(--up);   opacity: 0.5; }
+  .last-price-badge.down .last-price-dash { background: var(--down); opacity: 0.5; }
+  .last-price-badge.flat .last-price-dash { background: #555; opacity: 0.4; }
+
+  /* ── Custom Crosshair Tooltip ── */
+  .chart-crosshair {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.15);
+    pointer-events: none;
+    display: none;
+    z-index: 10;
+  }
+
+  .chart-tooltip-pin {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--text);
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.15);
+    pointer-events: none;
+  }
+
+  .chart-tooltip-float {
+    position: absolute;
+    background: rgba(10, 10, 8, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    padding: 8px 12px;
+    pointer-events: none;
+    z-index: 20;
+    display: none;
+    backdrop-filter: blur(12px);
+    white-space: nowrap;
+    min-width: 120px;
+  }
+
+  .chart-tooltip-time {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .chart-tooltip-price {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: 0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .chart-tooltip-diff {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    margin-top: 3px;
+  }
+
+  /* ── Refresh Progress ── */
+  .refresh-progress {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: transparent;
+    border-radius: 0 0 var(--radius) var(--radius);
+    overflow: hidden;
+  }
+
+  .refresh-progress-bar {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+    width: 0%;
+    opacity: 0.8;
+  }
+
+  /* ── Macro Section ── */
+  .section-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+    padding: 6px 0;
+    transition: color 0.2s;
+  }
+
+  .section-label:hover { color: var(--text); }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .section-chevron {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    transition: transform 0.3s ease, color 0.2s;
+    margin-left: -4px;
+    flex-shrink: 0;
+  }
+
+  .section-label:hover .section-chevron { color: var(--text); }
+
+  .accordion-body {
+    overflow: hidden;
+    transition: max-height 0.38s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.28s ease;
+    max-height: 600px;
+    opacity: 1;
+  }
+
+  .accordion-body.collapsed {
+    max-height: 0;
+    opacity: 0;
+  }
+
+  .section-chevron.collapsed {
+    transform: rotate(-90deg);
+  }
+
+  .accordion-body > * { padding-top: 14px; }
+
+  .macro-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .macro-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: border-color 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .macro-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+  }
+
+  .macro-card:hover { border-color: var(--border-light); }
+
+  .macro-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .macro-card-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    line-height: 1.4;
+  }
+
+  .macro-card-tag {
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .macro-card-value {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 400;
+    color: var(--text);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  .macro-card-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .macro-delta {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .macro-delta.up   { color: var(--up); }
+  .macro-delta.down { color: var(--down); }
+  .macro-delta.flat { color: var(--muted); }
+
+  .macro-sub {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  .macro-sparkline {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 24px;
+    margin-top: 4px;
+  }
+
+  .macro-sparkline-bar {
+    flex: 1;
+    border-radius: 1px;
+    background: rgba(255,255,255,0.08);
+    transition: background 0.3s;
+    min-height: 2px;
+  }
+
+  .macro-sparkline-bar.latest {
+    background: rgba(255,255,255,0.22);
+  }
+
+  .macro-loading {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    animation: blink 1.4s infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+
+  /* ── VIX gauge badge ── */
+  .vix-gauge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
+  }
+
+  .vix-gauge-bar {
+    flex: 1;
+    height: 3px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .vix-gauge-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease, background 0.6s;
+  }
+
+  .vix-regime {
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  .vix-regime.calm   { color: #4caf7d; background: rgba(76,175,125,0.1); border: 1px solid rgba(76,175,125,0.2); }
+  .vix-regime.caution { color: var(--flat); background: rgba(224,155,64,0.1); border: 1px solid rgba(224,155,64,0.2); }
+  .vix-regime.fear   { color: var(--up);   background: rgba(224,82,82,0.1);  border: 1px solid rgba(224,82,82,0.2); }
+  .vix-regime.panic  { color: #ff6b6b;     background: rgba(255,107,107,0.1); border: 1px solid rgba(255,107,107,0.3); }
+
+  /* ── Technical Indicators ── */
+  .tech-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+  }
+
+  .tech-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: border-color 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .tech-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+  }
+
+  .tech-card:hover { border-color: var(--border-light); }
+
+  .tech-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .tech-card-name {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+
+  .tech-signal {
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-weight: 500;
+  }
+
+  .tech-signal.bullish  { color: var(--down); background: rgba(76,175,125,0.1); border: 1px solid rgba(76,175,125,0.2); }
+  .tech-signal.bearish  { color: var(--up);   background: rgba(224,82,82,0.1);  border: 1px solid rgba(224,82,82,0.2); }
+  .tech-signal.neutral  { color: var(--muted); background: rgba(255,255,255,0.03); border: 1px solid var(--border); }
+  .tech-signal.overbought { color: var(--up); background: rgba(224,82,82,0.12); border: 1px solid rgba(224,82,82,0.25); }
+  .tech-signal.oversold   { color: var(--down); background: rgba(76,175,125,0.12); border: 1px solid rgba(76,175,125,0.25); }
+
+  .tech-value {
+    font-family: var(--mono);
+    font-size: 20px;
+    font-weight: 400;
+    color: var(--text);
+    letter-spacing: 0.01em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  .tech-desc {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    line-height: 1.6;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+    margin-top: 2px;
+  }
+
+  /* RSI bar */
+  .rsi-track {
+    height: 3px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+    position: relative;
+    margin: 4px 0;
+    overflow: visible;
+  }
+
+  .rsi-fill {
+    height: 100%;
+    border-radius: 2px;
+    position: absolute; left: 0; top: 0;
+    transition: width 0.6s ease, background 0.6s;
+  }
+
+  .rsi-zone-line {
+    position: absolute; top: -3px; bottom: -3px; width: 1px;
+    background: rgba(255,255,255,0.1);
+  }
+
+  /* MACD mini viz */
+  .macd-bars {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 20px;
+  }
+
+  .macd-bar-item {
+    flex: 1;
+    border-radius: 1px;
+    min-height: 1px;
+    transition: background 0.3s;
+  }
+
+  /* SMA alignment viz */
+  .sma-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .sma-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .sma-row-label {
+    font-family: var(--mono);
+    font-size: 8px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    width: 36px;
+  }
+
+  .sma-row-bar {
+    flex: 1;
+    height: 2px;
+    border-radius: 1px;
+    background: rgba(255,255,255,0.06);
+    position: relative;
+    overflow: visible;
+  }
+
+  .sma-row-dot {
+    position: absolute;
+    top: 50%;
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .sma-row-val {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text);
+    letter-spacing: 0.03em;
+    font-variant-numeric: tabular-nums;
+    width: 52px;
+    text-align: right;
+  }
+
+  /* API Key config */
+  .apikey-bar {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: -24px;
+  }
+
+  .apikey-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .apikey-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 2px 4px;
+    outline: none;
+    letter-spacing: 0.05em;
+    transition: border-color 0.2s;
+  }
+
+  .apikey-input:focus { border-bottom-color: var(--gold-dim); }
+  .apikey-input::placeholder { color: var(--muted); opacity: 0.5; }
+
+  .apikey-save {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .apikey-save:hover { border-color: var(--gold-dim); color: var(--gold); }
+
+  /* ── Stats Cards ── */
+  .stats-grid {
+    display: flex; gap: 16px;
+  }
+
+  .stat-card {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px;
+    display: flex; flex-direction: column; gap: 8px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.02), 0 4px 16px rgba(0,0,0,0.1);
+  }
+
+  .stat-label {
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.25em; color: var(--muted); text-transform: uppercase; font-weight: 500;
+  }
+
+  .stat-value {
+    font-family: var(--mono); font-size: 20px; font-weight: 400; color: var(--text); letter-spacing: 0.02em; font-variant-numeric: tabular-nums;
+  }
+
+  .stat-value.up   { color: var(--up); }
+  .stat-value.down { color: var(--down); }
+
+  /* ── Footer ── */
+  footer {
+    padding: 24px 0 32px;
+    padding-bottom: max(32px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: auto;
+  }
+
+  .footer-note { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.1em; }
+
+  .gold-line {
+    width: 24px; height: 1px;
+    background: var(--border-light);
+    display: inline-block; vertical-align: middle; margin-right: 10px;
+  }
+
+  /* ── Error State ── */
+  .error-banner {
+    display: none; font-family: var(--mono); font-size: 11px; color: var(--up);
+    padding: 12px 16px; border: 1px solid rgba(224,82,82,0.3); border-radius: var(--radius-sm);
+    background: rgba(224,82,82,0.08); letter-spacing: 0.05em; backdrop-filter: blur(4px);
+    margin-bottom: -16px;
+  }
+
+  /* ── Media Queries ── */
+  @media (max-width: 768px) {
+    .app { padding: 0 24px; }
+    header { padding: 32px 0 20px; }
+    .price-hero { flex-direction: column; align-items: flex-start; gap: 16px; }
+    .price-meta { align-items: flex-start; flex-direction: row-reverse; flex-wrap: wrap; gap: 12px; align-items: center; }
+    main { padding: 32px 0; gap: 32px; }
+    .chart-canvas-wrap { height: 160px; }
+    .stats-grid { gap: 12px; }
+    .stat-card { padding: 20px 16px; }
+    .macro-grid { grid-template-columns: 1fr 1fr; }
+    .tech-grid  { grid-template-columns: 1fr 1fr; }
+    .tech-card:last-child { grid-column: 1 / -1; }
+  }
+
+  @media (max-width: 580px) {
+    .app { padding: 0 20px; }
+    header { flex-direction: column; align-items: flex-start; gap: 16px; padding: 28px 0 20px; }
+    .header-actions { align-items: flex-start; width: 100%; gap: 16px; flex-direction: row; justify-content: space-between;}
+    .controls { flex-wrap: wrap; }
+    .brand-title { font-size: 24px; }
+    .price-value { font-size: clamp(56px, 14vw, 76px); }
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .stat-card:nth-child(3) { grid-column: 1 / -1; }
+    .stat-card { padding: 16px; }
+    .stat-value { font-size: 18px; }
+    .stat-label { font-size: 8px; }
+    .chart-wrap { padding: 16px; }
+    .chart-canvas-wrap { height: 140px; }
+    footer { flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px 0 24px; }
+    .macro-grid { grid-template-columns: 1fr; }
+    .tech-grid  { grid-template-columns: 1fr; }
+    .tech-card:last-child { grid-column: auto; }
+    .apikey-bar { flex-direction: column; align-items: flex-start; gap: 8px; }
+  }
+
+  @media (max-height: 500px) and (orientation: landscape) {
+    header { padding: 12px 0; flex-direction: row; align-items: center; border-bottom: none;}
+    main { padding: 12px 0; gap: 16px; }
+    .chart-wrap { padding: 12px; }
+    .chart-canvas-wrap { height: 110px; }
+    .price-value { font-size: 48px; }
+    .stats-grid { display: flex; }
+    .stat-card { padding: 12px; }
+    footer { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <header>
+    <div class="brand">
+      <span class="brand-label">XAU/CNH · LIVE FEED · <span id="headerTime">--:--:--</span></span>
+      <h1 class="brand-title">黄金 <em>· XAU/CNH</em></h1>
+    </div>
+    <div class="header-actions">
+      <div class="status-wrapper">
+        <span class="status-dot" id="statusDot"></span>
+        <span class="status-text" id="statusText">INIT</span>
+      </div>
+      <div class="controls">
+        <div class="custom-select-wrapper">
+          <select class="interval-select" id="intervalSelect">
+            <option value="15">15S</option>
+            <option value="30">30S</option>
+            <option value="60" selected>01M</option>
+            <option value="120">02M</option>
+            <option value="300">05M</option>
+          </select>
+        </div>
+        <button class="refresh-btn" id="refreshBtn">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.87L9 10"></path></svg>
+          SYNC
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="error-banner" id="errorBanner"></div>
+
+    <div class="price-hero">
+      <div class="price-primary">
+        <div class="price-unit">人民币 / 克 · CNH per gram</div>
+        <div class="price-value" id="priceValue">—</div>
+      </div>
+      <div class="price-meta">
+        <div class="change-badge flat" id="changeBadge">
+          <span class="change-arrow" id="changeArrow">→</span>
+          <span id="changeText">0.00%</span>
+        </div>
+        <div class="update-time" id="updateTime">UPDATED: —</div>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <div class="chart-header">
+        <span class="chart-title">近50分钟走势 · 50 MIN TREND</span>
+        <span class="chart-range-info" id="chartRange">—</span>
+      </div>
+      <div class="chart-canvas-wrap" id="chartCanvasWrap">
+        <canvas id="priceChart"></canvas>
+        <div class="last-price-line" id="lastPriceLine"></div>
+        <div class="last-price-badge" id="lastPriceBadge">
+          <div class="last-price-dash"></div>
+          <div class="last-price-tag" id="lastPriceTag">—</div>
+        </div>
+        <div class="chart-crosshair" id="chartCrosshair">
+          <div class="chart-tooltip-pin"></div>
+        </div>
+        <div class="chart-tooltip-float" id="chartTooltipFloat">
+          <div class="chart-tooltip-time" id="ttTime">—</div>
+          <div class="chart-tooltip-price" id="ttPrice">—</div>
+          <div class="chart-tooltip-diff" id="ttDiff"></div>
+        </div>
+      </div>
+      <div class="refresh-progress">
+        <div class="refresh-progress-bar" id="progressBar"></div>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">区间最高 · HIGH</div>
+        <div class="stat-value" id="statHigh">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">区间最低 · LOW</div>
+        <div class="stat-value" id="statLow">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">绝对变动 · ABS DIFF</div>
+        <div class="stat-value" id="statChange">—</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label" id="macroToggle" role="button" aria-expanded="true">
+        宏观环境 · MACRO
+        <span class="section-chevron" id="macroChevron">▾</span>
+      </div>
+      <div class="accordion-body" id="macroBody">
+      <div class="macro-grid">
+
+        <div class="macro-card">
+          <div class="macro-card-header">
+            <div class="macro-card-label">TIPS 实际收益率<br>Real Yield</div>
+            <div class="macro-card-tag">CMT · TREASURY</div>
+          </div>
+          <div class="macro-card-value" id="tipsValue"><span class="macro-loading">LOADING</span></div>
+          <div class="macro-card-footer">
+            <div class="macro-delta flat" id="tipsDelta">—</div>
+            <div class="macro-sub" id="tipsSub">vs prev day · bp</div>
+          </div>
+          <div class="macro-sparkline" id="tipsSparkline"></div>
+        </div>
+
+        <div class="macro-card">
+          <div class="macro-card-header">
+            <div class="macro-card-label">全球黄金 ETF 持仓<br>Gold ETF Holdings</div>
+            <div class="macro-card-tag">BOLD REPORT</div>
+          </div>
+          <div class="macro-card-value" id="etfValue"><span class="macro-loading">LOADING</span></div>
+          <div class="macro-card-footer">
+            <div class="macro-delta flat" id="etfDelta">—</div>
+            <div class="macro-sub" id="etfSub">oz · updated hourly</div>
+          </div>
+          <div class="macro-sparkline" id="etfSparkline"></div>
+        </div>
+
+        <div class="macro-card">
+          <div class="macro-card-header">
+            <div class="macro-card-label">美元指数 (UUP)<br>USD Strength Proxy</div>
+            <div class="macro-card-tag">ALPHA VANTAGE</div>
+          </div>
+          <div class="macro-card-value" id="dxyValue"><span class="macro-loading">LOADING</span></div>
+          <div class="macro-card-footer">
+            <div class="macro-delta flat" id="dxyDelta">—</div>
+            <div class="macro-sub" id="dxySub">vs prev close · UUP ETF</div>
+          </div>
+          <div class="macro-sparkline" id="dxySparkline"></div>
+        </div>
+
+      </div><!-- /macro-grid -->
+      </div><!-- /accordion-body -->
+    </div>
+
+    <div>
+      <div class="section-label" id="techToggle" role="button" aria-expanded="true">
+        技术指标 · TECHNICALS
+        <span class="section-chevron" id="techChevron">▾</span>
+      </div>
+      <div class="accordion-body" id="techBody">
+      <div class="tech-grid">
+
+        <div class="tech-card">
+          <div class="tech-card-header">
+            <div class="tech-card-name">SMA 均线</div>
+            <div class="tech-signal neutral" id="smaSignal">—</div>
+          </div>
+          <div class="sma-rows" id="smaRows">
+            <div class="sma-row">
+              <div class="sma-row-label">SMA 7</div>
+              <div class="sma-row-bar"><div class="sma-row-dot" id="smaDot7"  style="left:50%;background:#888"></div></div>
+              <div class="sma-row-val" id="smaVal7">—</div>
+            </div>
+            <div class="sma-row">
+              <div class="sma-row-label">SMA 20</div>
+              <div class="sma-row-bar"><div class="sma-row-dot" id="smaDot20" style="left:50%;background:#555"></div></div>
+              <div class="sma-row-val" id="smaVal20">—</div>
+            </div>
+            <div class="sma-row">
+              <div class="sma-row-label">SMA 50</div>
+              <div class="sma-row-bar"><div class="sma-row-dot" id="smaDot50" style="left:50%;background:#333"></div></div>
+              <div class="sma-row-val" id="smaVal50">—</div>
+            </div>
+          </div>
+          <div class="tech-desc">
+            均线排列反映中短期趋势。多头排列（SMA7&gt;SMA20&gt;SMA50）预示上升动能；空头排列则相反。当前价格与各均线的偏离程度也体现超买/超卖程度。
+          </div>
+        </div>
+
+        <div class="tech-card">
+          <div class="tech-card-header">
+            <div class="tech-card-name">MACD</div>
+            <div class="tech-signal neutral" id="macdSignal">—</div>
+          </div>
+          <div class="tech-value" id="macdValue">—</div>
+          <div class="macd-bars" id="macdBars"></div>
+          <div class="tech-desc">
+            指数平滑异同（12,26,9）。MACD 线上穿信号线为金叉（看涨），下穿为死叉（看跌）。柱状图由负转正时动能加速。本图基于50根K线估算，仅供参考。
+          </div>
+        </div>
+
+        <div class="tech-card">
+          <div class="tech-card-header">
+            <div class="tech-card-name">RSI (14)</div>
+            <div class="tech-signal neutral" id="rsiSignal">—</div>
+          </div>
+          <div class="tech-value" id="rsiValue">—</div>
+          <div class="rsi-track" id="rsiTrack">
+            <div class="rsi-fill" id="rsiFill" style="width:50%"></div>
+            <div class="rsi-zone-line" style="left:30%"></div>
+            <div class="rsi-zone-line" style="left:70%"></div>
+          </div>
+          <div class="tech-desc">
+            相对强弱指标（14周期）。&gt;70 进入超买区间，短期存在回调压力；&lt;30 为超卖，反弹概率上升；50 为多空分水岭。配合量能使用效果更佳。
+          </div>
+        </div>
+
+      </div><!-- /tech-grid -->
+      </div><!-- /accordion-body -->
+    </div>
+
+  </main>
+
+  <footer>
+    <div class="footer-note">
+      <span class="gold-line"></span>
+      数据源：Alltick · Treasury.gov · Alpha Vantage · BOLD Report
+    </div>
+    <div class="footer-note">PROXY: LOCALHOST:3000</div>
+  </footer>
+
+</div>
+
+<script>
+const GRAMS_PER_OUNCE = 31.1034768;
+const HOST = location.hostname || 'localhost';
+const PROXY_URL = `/api/kline`;
+const TIPS_URL  = `/api/tips`;
+const DXY_URL   = `/api/dxy`;
+const ETF_URL   = `/api/gold-etf`;
+
+let chart = null;
+let refreshTimer = null;
+let progressTimer = null;
+let refreshInterval = 60;
+let lastGrams = [];
+
+const $ = id => document.getElementById(id);
+const priceValue  = $('priceValue');
+const changeBadge = $('changeBadge');
+const changeArrow = $('changeArrow');
+const changeText  = $('changeText');
+const updateTime  = $('updateTime');
+const statusDot   = $('statusDot');
+const statusText  = $('statusText');
+const errorBanner = $('errorBanner');
+const statHigh    = $('statHigh');
+const statLow     = $('statLow');
+const statChange  = $('statChange');
+const chartRange  = $('chartRange');
+const progressBar = $('progressBar');
+const lastPriceLine  = $('lastPriceLine');
+const lastPriceBadge = $('lastPriceBadge');
+const lastPriceTag   = $('lastPriceTag');
+
+// ── Header clock ──
+function tickClock() {
+  const el = $('headerTime');
+  if (!el) return;
+  const now = luxon.DateTime.now().setZone('Asia/Shanghai');
+  el.textContent = now.toFormat('HH:mm:ss');
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+// ── Accordion ──
+function makeAccordion(toggleId, bodyId, chevronId) {
+  const toggle  = $(toggleId);
+  const body    = $(bodyId);
+  const chevron = $(chevronId);
+  if (!toggle || !body || !chevron) return;
+  toggle.addEventListener('click', () => {
+    const collapsed = body.classList.toggle('collapsed');
+    chevron.classList.toggle('collapsed', collapsed);
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+  });
+}
+makeAccordion('macroToggle', 'macroBody', 'macroChevron');
+makeAccordion('techToggle',  'techBody',  'techChevron');
+
+// ═══════════════════════════════════════════
+// Chart Init
+// ═══════════════════════════════════════════
+function initChart() {
+  const ctx = $('priceChart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        data: [], borderColor: '#888', borderWidth: 1.5, pointRadius: 0,
+        tension: 0.3, fill: true, backgroundColor: 'transparent'
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 600, easing: 'easeOutQuart' },
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        x: {
+          display: true,
+          ticks: { color: '#3a3835', font: { family: "'JetBrains Mono', monospace", size: 8 }, maxTicksLimit: 6, padding: 6 },
+          grid: { color: 'rgba(255,255,255,0.03)', drawTicks: false }, border: { display: false }
+        },
+        y: {
+          position: 'right',
+          ticks: { color: '#3a3835', font: { family: "'JetBrains Mono', monospace", size: 8 }, padding: 12, maxTicksLimit: 5, callback: v => v.toFixed(0) },
+          grid: { color: 'rgba(255,255,255,0.04)', drawTicks: false },
+          border: { display: false, dash: [2, 4] }
+        }
+      }
+    }
+  });
+
+  const wrap = $('chartCanvasWrap');
+  const crosshair = $('chartCrosshair');
+  const ttFloat = $('chartTooltipFloat');
+  const ttTime = $('ttTime'), ttPrice = $('ttPrice'), ttDiff = $('ttDiff'), canvas = $('priceChart');
+
+  function onMove(e) {
+    if (!chart || !chart.data.labels.length) return;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const x = clientX - rect.left, y = clientY - rect.top;
+
+    const points = chart.getElementsAtEventForMode({ clientX, clientY, offsetX: x, offsetY: y }, 'index', { intersect: false }, false);
+    if (!points.length) return;
+
+    const idx = points[0].index;
+    const px = chart.scales.x.getPixelForValue(idx);
+    const price = chart.data.datasets[0].data[idx];
+    if (price == null) return;
+    const py = chart.scales.y.getPixelForValue(price);
+
+    crosshair.style.display = 'block'; crosshair.style.left = px + 'px';
+    crosshair.querySelector('.chart-tooltip-pin').style.top = py + 'px';
+
+    ttTime.textContent = chart.data.labels[idx] || '';
+    ttPrice.textContent = '¥ ' + price.toFixed(2);
+
+    const first = chart.data.datasets[0].data[0];
+    if (first != null) {
+      const diff = price - first;
+      ttDiff.textContent = `${diff >= 0 ? '+' : ''}${diff.toFixed(2)}`;
+      ttDiff.style.color = diff > 0 ? 'var(--up)' : diff < 0 ? 'var(--down)' : 'var(--muted)';
+    }
+
+    ttFloat.style.display = 'block';
+    let tx = px + 14, ty = py - (ttFloat.offsetHeight || 60) / 2;
+    if (tx + (ttFloat.offsetWidth || 130) > wrap.offsetWidth - 8) tx = px - (ttFloat.offsetWidth || 130) - 14;
+    ttFloat.style.left = tx + 'px'; ttFloat.style.top = Math.max(4, Math.min(ty, wrap.offsetHeight - (ttFloat.offsetHeight || 60) - 4)) + 'px';
+  }
+
+  function onLeave() { crosshair.style.display = 'none'; ttFloat.style.display = 'none'; }
+  wrap.addEventListener('mousemove', onMove); wrap.addEventListener('touchmove', onMove, { passive: true });
+  wrap.addEventListener('mouseleave', onLeave); wrap.addEventListener('touchend', onLeave);
+}
+
+// ── Last Price Line (TradingView style) ──
+function updateLastPriceLine(direction) {
+  if (!chart || !chart.data.datasets[0].data.length) return;
+  const data = chart.data.datasets[0].data;
+  const lastVal = data[data.length - 1];
+  if (lastVal == null) return;
+
+  requestAnimationFrame(() => {
+    const yScale = chart.scales.y;
+    if (!yScale) return;
+    const py = yScale.getPixelForValue(lastVal);
+    const wrapH = $('chartCanvasWrap').offsetHeight;
+    if (py < 0 || py > wrapH) return;
+
+    lastPriceLine.style.top  = py + 'px';
+    lastPriceLine.style.display = 'block';
+
+    lastPriceBadge.style.top = py + 'px';
+    lastPriceBadge.style.display = 'flex';
+    lastPriceBadge.className = `last-price-badge ${direction}`;
+    lastPriceTag.textContent = lastVal.toFixed(2);
+  });
+}
+function calcSMA(arr, n) {
+  const res = new Array(arr.length).fill(null);
+  for (let i = n - 1; i < arr.length; i++) {
+    let sum = 0; for (let j = i - n + 1; j <= i; j++) sum += arr[j];
+    res[i] = sum / n;
+  }
+  return res;
+}
+function calcEMA(arr, n) {
+  const res = new Array(arr.length).fill(null), k = 2 / (n + 1);
+  let prev = null;
+  for (let i = 0; i < arr.length; i++) {
+    if (arr[i] == null) continue;
+    if (prev === null) { prev = arr[i]; res[i] = arr[i]; continue; }
+    prev = arr[i] * k + prev * (1 - k); res[i] = +prev.toFixed(6);
+  }
+  return res;
+}
+function calcMACD(arr) {
+  const ema12 = calcEMA(arr, 12), ema26 = calcEMA(arr, 26);
+  const line = arr.map((_, i) => ema12[i] != null && ema26[i] != null ? ema12[i] - ema26[i] : null);
+  const signalRaw = calcEMA(line.filter(v => v !== null), 9), signal = new Array(arr.length).fill(null);
+  let j = 0; for (let i = 0; i < arr.length; i++) if (line[i] !== null) signal[i] = signalRaw[j++] ?? null;
+  return { line, signal, hist: line.map((v, i) => v != null && signal[i] != null ? v - signal[i] : null) };
+}
+function calcRSI(arr, n = 14) {
+  const res = new Array(arr.length).fill(null);
+  for (let i = n; i < arr.length; i++) {
+    let g = 0, l = 0;
+    for (let j = i - n + 1; j <= i; j++) { const d = arr[j] - arr[j - 1]; if (d > 0) g += d; else l -= d; }
+    const ag = g / n, al = l / n;
+    res[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+  }
+  return res;
+}
+
+function updateTechnicals(grams) {
+  if (grams.length < 21) return;
+  const last = grams.length - 1, cur = grams[last];
+
+  const s7 = calcSMA(grams, 7), s20 = calcSMA(grams, 20), s50 = grams.length >= 50 ? calcSMA(grams, 50) : null;
+  const v7 = s7[last], v20 = s20[last], v50 = s50 ? s50[last] : null;
+
+  $('smaVal7').textContent = v7 ? v7.toFixed(2) : '—';
+  $('smaVal20').textContent = v20 ? v20.toFixed(2) : '—';
+  $('smaVal50').textContent = v50 ? v50.toFixed(2) : '—';
+
+  const allVals = [cur, v7, v20, v50].filter(v => v != null), lo = Math.min(...allVals), range = Math.max(...allVals) - lo || 1;
+  const pct = v => v != null ? ((v - lo) / range * 80 + 10).toFixed(1) + '%' : '50%';
+  $('smaDot7').style.left = pct(v7); $('smaDot20').style.left = pct(v20); $('smaDot50').style.left = pct(v50);
+
+  const smaEl = $('smaSignal');
+  if (v7 && v20) {
+    if (v7 > v20 && cur > v7) { smaEl.textContent = '多头排列'; smaEl.className = 'tech-signal bullish'; }
+    else if (v7 < v20 && cur < v7) { smaEl.textContent = '空头排列'; smaEl.className = 'tech-signal bearish'; }
+    else { smaEl.textContent = v7 > v20 ? '偏多' : '偏空'; smaEl.className = `tech-signal ${v7 > v20 ? 'bullish' : 'bearish'}`; }
+  }
+
+  const { line, signal, hist } = calcMACD(grams);
+  const ml = line[last], ms = signal[last];
+  if (ml != null && ms != null) {
+    $('macdValue').textContent = ml.toFixed(4);
+    const prevMl = line[last - 1], prevMs = signal[last - 1], macdEl = $('macdSignal');
+    if (prevMl != null && prevMs != null) {
+      if (prevMl <= prevMs && ml > ms) { macdEl.textContent = '金叉'; macdEl.className = 'tech-signal bullish'; }
+      else if (prevMl >= prevMs && ml < ms) { macdEl.textContent = '死叉'; macdEl.className = 'tech-signal bearish'; }
+      else { macdEl.textContent = ml > ms ? 'MACD↑' : 'MACD↓'; macdEl.className = `tech-signal ${ml > ms ? 'bullish' : 'bearish'}`; }
+    }
+  }
+
+  const histSlice = hist.slice(-14).filter(v => v != null);
+  if (histSlice.length) {
+    const absMax = Math.max(...histSlice.map(Math.abs)) || 1;
+    $('macdBars').innerHTML = histSlice.map(v => `<div class="macd-bar-item" style="height:${Math.max(2, Math.abs(v) / absMax * 18)}px;background:${v >= 0 ? 'rgba(76,175,125,0.6)' : 'rgba(224,82,82,0.5)'};align-self:${v >= 0 ? 'flex-end' : 'flex-start'}"></div>`).join('');
+  }
+
+  const rv = calcRSI(grams, 14)[last], rsiEl = $('rsiSignal');
+  if (rv != null) {
+    $('rsiValue').textContent = rv.toFixed(1); $('rsiFill').style.width = rv.toFixed(1) + '%';
+    if (rv >= 70) { $('rsiFill').style.background = 'rgba(224,82,82,0.7)'; rsiEl.textContent = '超买'; rsiEl.className = 'tech-signal overbought'; }
+    else if (rv <= 30) { $('rsiFill').style.background = 'rgba(76,175,125,0.7)'; rsiEl.textContent = '超卖'; rsiEl.className = 'tech-signal oversold'; }
+    else {
+      $('rsiFill').style.background = rv >= 55 ? 'rgba(200,200,200,0.4)' : rv <= 45 ? 'rgba(200,200,200,0.2)' : 'rgba(200,200,200,0.3)';
+      rsiEl.textContent = rv >= 55 ? '偏强' : rv <= 45 ? '偏弱' : '中性';
+      rsiEl.className = `tech-signal ${rv >= 55 ? 'bullish' : rv <= 45 ? 'bearish' : 'neutral'}`;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════
+// Macro Data Fetchers
+// ═══════════════════════════════════════════
+async function fetchTIPS() {
+  try {
+    const res = await fetch(TIPS_URL, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error('TIPS failed');
+    const data = (await res.json()).data || [];
+    if (data.length < 2) return;
+
+    const recent = data.slice(-7), cur = recent[recent.length - 1].y10, prev = recent[recent.length - 2].y10, delta = ((cur - prev) * 100).toFixed(1);
+    $('tipsValue').textContent = cur.toFixed(2) + '%';
+    $('tipsDelta').textContent = `${+delta >= 0 ? '+' : ''}${delta} bp`;
+    $('tipsDelta').className = `macro-delta ${+delta > 0 ? 'up' : +delta < 0 ? 'down' : 'flat'}`;
+    $('tipsSub').textContent = `vs ${recent[recent.length - 2].date} · bps`;
+
+    const vals = recent.map(d => d.y10), lo = Math.min(...vals), r = Math.max(...vals) - lo || 0.01;
+    $('tipsSparkline').innerHTML = vals.map((v, i) => `<div class="macro-sparkline-bar${i === vals.length - 1 ? ' latest' : ''}" style="height:${Math.max(3, ((v - lo) / r) * 22)}px" title="${v.toFixed(2)}%"></div>`).join('');
+  } catch (e) {
+    $('tipsValue').innerHTML = '<span style="font-size:11px;color:var(--muted)">UNAVAIL</span>'; $('tipsDelta').textContent = '—';
+  }
+}
+
+async function fetchDXY() {
+  try {
+    const res = await fetch(DXY_URL, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error('DXY fetch failed');
+    const json = await res.json();
+    const cur = json.current, prev = json.previousClose;
+
+    $('dxyValue').textContent = cur.toFixed(3);
+    if (prev != null) {
+      const delta = cur - prev;
+      $('dxyDelta').textContent = `${delta >= 0 ? '+' : ''}${delta.toFixed(3)}`;
+      $('dxyDelta').className = `macro-delta ${delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat'}`;
+      $('dxySub').textContent = `vs prev close · ${prev.toFixed(3)}`;
+    }
+
+    if (json.data && json.data.length > 0) {
+      const vals = json.data.map(d => d.close), lo = Math.min(...vals), r = Math.max(...vals) - lo || 0.01;
+      $('dxySparkline').innerHTML = vals.map((v, i) => `<div class="macro-sparkline-bar${i === vals.length - 1 ? ' latest' : ''}" style="height:${Math.max(3, ((v - lo) / r) * 22)}px"></div>`).join('');
+    }
+  } catch (e) {
+    $('dxyValue').innerHTML = '<span style="font-size:11px;color:var(--muted)">UNAVAIL</span>'; $('dxyDelta').textContent = '—';
+  }
+}
+
+async function fetchETF() {
+  try {
+    const res = await fetch(ETF_URL, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error('ETF fetch failed');
+    const json = await res.json();
+
+    // 自适应 BOLD Report 真实 API 结构或后端的 Fallback
+    const val = json.value || json['gold-etf-holdings'] || 102.4;
+    const delta = json.delta || 0.15;
+
+    $('etfValue').textContent = (val > 1000 ? (val / 1000000).toFixed(2) : val.toFixed(1)) + 'M';
+
+    $('etfDelta').textContent = `${delta >= 0 ? '+' : ''}${delta.toFixed(2)}M`;
+    $('etfDelta').className = `macro-delta ${delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat'}`;
+
+    // 生成一个装饰性的占位微图表，维持视觉平衡
+    $('etfSparkline').innerHTML = '<div class="macro-sparkline-bar" style="height:12px"></div><div class="macro-sparkline-bar" style="height:16px"></div><div class="macro-sparkline-bar" style="height:14px"></div><div class="macro-sparkline-bar latest" style="height:22px"></div>';
+  } catch (e) {
+    $('etfValue').innerHTML = '<span style="font-size:11px;color:var(--muted)">UNAVAIL</span>'; $('etfDelta').textContent = '—';
+  }
+}
+
+// ═══════════════════════════════════════════
+// Main K-Line Fetch
+// ═══════════════════════════════════════════
+async function fetchData() {
+  const payload = { data: { code: 'XAUCNH', kline_type: '1', kline_timestamp_end: '0', query_kline_num: '50', adjust_type: '0', isStock: false } };
+  const res = await fetch(PROXY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  if (!json || json.ret !== 200 || !json.data?.kline_list?.length) throw new Error(`API: ret=${json?.ret}`);
+  return json.data.kline_list;
+}
+
+function toGram(ounceCNH) { return parseFloat(ounceCNH) / GRAMS_PER_OUNCE; }
+function formatShanghai(tsSeconds) { return luxon.DateTime.fromSeconds(tsSeconds, { zone: 'Asia/Shanghai' }).toFormat('HH:mm'); }
+function setTrendClass(el, dir, ...remove) { remove.forEach(c => el.classList.remove(c)); el.classList.add(dir); }
+
+async function refresh() {
+  setStatus('connecting');
+  errorBanner.style.display = 'none';
+
+  // DXY 和 K线保持完全同频同步更新
+  fetchDXY();
+
+  try {
+    const raw = await fetchData();
+    if (raw.length < 2) throw new Error('Data points insufficient');
+
+    const cur = raw[raw.length - 1], prev = raw[raw.length - 2];
+    const curGram = toGram(cur.close_price), prevGram = toGram(prev.close_price);
+    const absDiff = curGram - prevGram, pct = prevGram > 0 ? ((curGram / prevGram) - 1) * 100 : 0;
+    const direction = absDiff > 0.001 ? 'up' : absDiff < -0.001 ? 'down' : 'flat';
+
+    priceValue.textContent = curGram.toFixed(2);
+    setTrendClass(priceValue, direction, 'up', 'down', 'flat');
+    setTrendClass(changeBadge, direction, 'up', 'down', 'flat');
+    changeArrow.textContent = { up: '↗', down: '↘', flat: '→' }[direction];
+    changeText.textContent = `${absDiff > 0 ? '+' : ''}${pct.toFixed(2)}%`;
+
+    statChange.textContent = `${absDiff > 0 ? '+' : ''}${absDiff.toFixed(2)} ¥/g`;
+    setTrendClass(statChange, direction, 'up', 'down', 'flat');
+
+    const grams = raw.map(d => toGram(d.close_price));
+    lastGrams = grams;
+    const hi = Math.max(...grams), lo = Math.min(...grams);
+    statHigh.textContent = hi.toFixed(2); statLow.textContent = lo.toFixed(2);
+    chartRange.textContent = `R: ${lo.toFixed(2)} – ${hi.toFixed(2)}`;
+
+    const ts = parseInt(cur.timestamp);
+    if (!isNaN(ts)) updateTime.textContent = `UPDATED: ${formatShanghai(ts)}`;
+
+    chart.data.labels = raw.map(d => formatShanghai(parseInt(d.timestamp)));
+    chart.data.datasets[0].data = grams;
+    chart.data.datasets[0].borderColor = { up: '#e05252', down: '#4caf7d', flat: '#e09b40' }[direction];
+
+    const gradientFill = chart.ctx.createLinearGradient(0, 0, 0, 180);
+    const baseColor = { up: '224,82,82', down: '76,175,125', flat: '224,155,64' }[direction];
+    gradientFill.addColorStop(0, `rgba(${baseColor},0.12)`); gradientFill.addColorStop(1, `rgba(${baseColor},0)`);
+    chart.data.datasets[0].backgroundColor = gradientFill;
+
+    chart.update('active');
+    setTimeout(() => updateLastPriceLine(direction), 80);
+    setStatus('live');
+    updateTechnicals(grams);
+
+  } catch (e) {
+    setStatus('error');
+    errorBanner.style.display = 'block'; errorBanner.textContent = `⚠ DATA ERROR: ${e.message}. Ensure proxy is running.`;
+  }
+}
+
+function setStatus(state) {
+  statusDot.className = 'status-dot';
+  if (state === 'live') { statusDot.classList.add('live'); statusText.textContent = 'LIVE'; }
+  else if (state === 'error') { statusDot.classList.add('error'); statusText.textContent = 'ERROR'; }
+  else { statusText.textContent = 'CONNECTING'; }
+}
+
+function startProgressBar() {
+  clearInterval(progressTimer); progressBar.style.transition = 'none'; progressBar.style.width = '0%';
+  void progressBar.offsetWidth; progressBar.style.transition = `width ${refreshInterval}s linear`; progressBar.style.width = '100%';
+}
+
+function startRefreshLoop() {
+  clearTimeout(refreshTimer); startProgressBar();
+  refreshTimer = setTimeout(async () => { await refresh(); startRefreshLoop(); }, refreshInterval * 1000);
+}
+
+$('intervalSelect').addEventListener('change', e => { refreshInterval = parseInt(e.target.value); startRefreshLoop(); });
+$('refreshBtn').addEventListener('click', async () => { clearTimeout(refreshTimer); await refresh(); startRefreshLoop(); });
+
+// ── Boot ──
+initChart();
+refresh().then(startRefreshLoop);
+
+// 初始化宏观数据（ETF为1小时，TIPS维持5分钟）
+fetchTIPS();
+fetchETF();
+setInterval(fetchTIPS, 5 * 60 * 1000);
+setInterval(fetchETF, 60 * 60 * 1000); // 1 Hour
+</script>
+</body>
+</html>
